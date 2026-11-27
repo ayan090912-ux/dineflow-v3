@@ -226,6 +226,16 @@ def format_order_response(order: Order, station: Optional[str] = None, hide_fina
             eff_b_status = "COMPLETED" if raw_status in ["COMPLETED", "DELIVERED", "CANCELLED"] else (raw_status or "PENDING")
         if eff_k_status is None and any(resolve_item_station(it) == "KITCHEN" for it in raw_items):
             eff_k_status = "COMPLETED" if raw_status in ["COMPLETED", "DELIVERED", "CANCELLED"] else (raw_status or "PENDING")
+    if raw_status not in ["DELIVERED", "COMPLETED", "SERVED", "CANCELLED"]:
+        if getattr(order, "delivery_status", None) == "DELIVERED":
+            raw_status = "DELIVERED"
+        else:
+            has_k = any(resolve_item_station(it) == "KITCHEN" for it in raw_items) if raw_items else (eff_k_status is not None)
+            has_b = any(resolve_item_station(it) == "BAR" for it in raw_items) if raw_items else (eff_b_status is not None)
+            has_h = any(resolve_item_station(it) == "HOOKAH" for it in raw_items) if raw_items else (eff_h_status is not None)
+            done_states = ("COMPLETED", "DELIVERED", "SERVED")
+            if (has_k or has_b or has_h) and (not has_k or eff_k_status in done_states) and (not has_b or eff_b_status in done_states) and (not has_h or eff_h_status in done_states):
+                raw_status = "DELIVERED"
 
     return {
         "id": getattr(order, "id", ""),
@@ -1642,7 +1652,7 @@ async def update_order_status(
 
     # Reconcile overall status:
     # If no specific station was targeted and target_status is explicitly DELIVERED/COMPLETED/CANCELLED
-    if not req_station and target_status in ["DELIVERED", "COMPLETED", "SERVED", "OUT_FOR_DELIVERY", "CANCELLED"] and caller_role in ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "RUNNER", "STAFF", "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"]:
+    if not req_station and target_status in ["DELIVERED", "COMPLETED", "SERVED", "OUT_FOR_DELIVERY", "CANCELLED"] and (caller.is_admin or caller_role in ["WAITER", "SERVER", "OWNER", "RESTAURANT_OWNER", "MANAGER", "ADMIN", "SUPER_ADMIN", "EVENT_STAFF", "EVENT_MANAGER", "EVENT_RUNNER", "RUNNER", "STAFF", "CART", "CART_STAFF", "FOOD_CART", "CART_OPERATOR", "CART_OWNER"]):
         if target_status == "CANCELLED":
             order.status = "CANCELLED"
             order.delivery_status = "CANCELLED"

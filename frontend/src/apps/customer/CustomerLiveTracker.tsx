@@ -26,55 +26,84 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
       const p = (event as any).payload || (event as any).data || event;
       const evtOrdId = (event as any).orderId || (event as any).order_id || (event as any).id || p?.id || p?.orderId || p?.order_id || p?.order?.id;
       if (evtOrdId && String(evtOrdId) === String(currentOrder.id)) {
-        let newStatus = p.status;
-        let newKitchenStatus = p.kitchenStatus || p.kitchen_status;
-        let newBarStatus = p.barStatus || p.bar_status;
-        let newHookahStatus = p.hookahStatus || p.hookah_status;
+        const station = String(p.station || (event as any).station || '').toUpperCase();
+        let newStatus = p.status || (event as any).status;
+        let newKitchenStatus = p.kitchenStatus || p.kitchen_status || (event as any).kitchenStatus;
+        let newBarStatus = p.barStatus || p.bar_status || (event as any).barStatus;
+        let newHookahStatus = p.hookahStatus || p.hookah_status || (event as any).hookahStatus;
+        const newDeliveryStatus = p.deliveryStatus || p.delivery_status || (event as any).deliveryStatus;
 
         if (event.type === 'order_ready' || event.type === 'OrderReady') {
-          newStatus = 'READY';
-          newKitchenStatus = 'READY';
+          if (station === 'KITCHEN') newKitchenStatus = newKitchenStatus || 'READY';
+          else if (station === 'BAR') newBarStatus = newBarStatus || 'READY';
+          else if (station === 'HOOKAH') newHookahStatus = newHookahStatus || 'READY';
+          else newStatus = newStatus || 'READY';
         } else if (event.type === 'order_delivered' || event.type === 'OrderDelivered') {
-          newStatus = 'DELIVERED';
+          if (station === 'KITCHEN') newKitchenStatus = newKitchenStatus || 'COMPLETED';
+          else if (station === 'BAR') newBarStatus = newBarStatus || 'COMPLETED';
+          else if (station === 'HOOKAH') newHookahStatus = newHookahStatus || 'COMPLETED';
+          else newStatus = newStatus || 'DELIVERED';
         } else if (event.type === 'order_completed' || event.type === 'OrderCompleted') {
           newStatus = 'COMPLETED';
         }
 
-        setCurrentOrder((prev) => {
-          const updated = {
-            ...prev,
-            ...p,
-            status: newStatus || p.status || prev.status,
-            kitchenStatus: newKitchenStatus || prev.kitchenStatus,
-            barStatus: newBarStatus || prev.barStatus,
-            hookahStatus: newHookahStatus || prev.hookahStatus,
-            etaTargetTimestamp: p.etaTargetTimestamp || p.eta_target_timestamp || prev.etaTargetTimestamp,
-          };
-          if (onUpdateOrder) {
-            onUpdateOrder(updated);
-          }
-          return updated;
-        });
+        setCurrentOrder((prev) => ({
+          ...prev,
+          status: (newStatus ? String(newStatus).toUpperCase() : prev.status) as Order['status'],
+          kitchenStatus: (newKitchenStatus ? String(newKitchenStatus).toUpperCase() : prev.kitchenStatus) as Order['kitchenStatus'],
+          barStatus: (newBarStatus ? String(newBarStatus).toUpperCase() : prev.barStatus) as Order['barStatus'],
+          hookahStatus: (newHookahStatus ? String(newHookahStatus).toUpperCase() : prev.hookahStatus) as Order['hookahStatus'],
+          deliveryStatus: newDeliveryStatus || (newStatus === 'DELIVERED' ? 'DELIVERED' : prev.deliveryStatus),
+          estimatedPrepTimeMinutes: p.estimatedPrepTimeMinutes ?? p.estimated_prep_time_minutes ?? prev.estimatedPrepTimeMinutes,
+          etaTargetTimestamp: p.etaTargetTimestamp || p.eta_target_timestamp || prev.etaTargetTimestamp,
+        }));
       }
     });
     return () => unsubscribe();
-  }, [currentOrder.id, onUpdateOrder]);
-
-  // Canonical lifecycle flags derived strictly from authoritative backend state
-  const isOrderDelivered = currentOrder.status === 'DELIVERED' || currentOrder.status === 'COMPLETED';
+  }, [currentOrder.id]);
 
   // Multi-station independent progress tracking
   const hasKitchenItems = Boolean(currentOrder.items && currentOrder.items.some((i) => getFulfillmentStation(i) === 'KITCHEN'));
   const hasBarItems = Boolean(currentOrder.items && currentOrder.items.some((i) => getFulfillmentStation(i) === 'BAR'));
   const hasHookahItems = Boolean(currentOrder.items && currentOrder.items.some((i) => getFulfillmentStation(i) === 'HOOKAH'));
+  const hasAnyStation = hasKitchenItems || hasBarItems || hasHookahItems;
 
-  const kReady = !hasKitchenItems || currentOrder.kitchenStatus === 'READY' || currentOrder.kitchenStatus === 'COMPLETED';
-  const bReady = !hasBarItems || currentOrder.barStatus === 'READY' || currentOrder.barStatus === 'COMPLETED';
-  const hReady = !hasHookahItems || currentOrder.hookahStatus === 'READY' || currentOrder.hookahStatus === 'COMPLETED';
+  const isStationCompleted = (s?: string) => s === 'COMPLETED' || s === 'DELIVERED' || s === 'SERVED';
+  const isStationReadyOrDone = (s?: string) => s === 'READY' || s === 'READY_FOR_PICKUP' || isStationCompleted(s);
+
+  const kDone = !hasKitchenItems || isStationCompleted(currentOrder.kitchenStatus);
+  const bDone = !hasBarItems || isStationCompleted(currentOrder.barStatus);
+  const hDone = !hasHookahItems || isStationCompleted(currentOrder.hookahStatus);
+
+  // Canonical lifecycle flags derived strictly from authoritative backend state
+  const isOrderDelivered =
+    currentOrder.status === 'DELIVERED' ||
+    currentOrder.status === 'COMPLETED' ||
+    currentOrder.status === 'SERVED' ||
+    currentOrder.deliveryStatus === 'DELIVERED' ||
+    (hasAnyStation && kDone && bDone && hDone);
+
+  const kReady = !hasKitchenItems || isStationReadyOrDone(currentOrder.kitchenStatus);
+  const bReady = !hasBarItems || isStationReadyOrDone(currentOrder.barStatus);
+  const hReady = !hasHookahItems || isStationReadyOrDone(currentOrder.hookahStatus);
+  const anyStationReadyOrDone =
+    (hasKitchenItems && isStationReadyOrDone(currentOrder.kitchenStatus)) ||
+    (hasBarItems && isStationReadyOrDone(currentOrder.barStatus)) ||
+    (hasHookahItems && isStationReadyOrDone(currentOrder.hookahStatus));
 
   // Overall order is ready ONLY when ALL active stations have finished preparing!
-  const isOrderReady = isOrderDelivered || (currentOrder.status === 'READY') || (kReady && bReady && hReady && (currentOrder.kitchenStatus === 'READY' || currentOrder.barStatus === 'READY' || currentOrder.hookahStatus === 'READY'));
-  const isOrderPreparing = isOrderReady || currentOrder.status === 'PREPARING' || currentOrder.kitchenStatus === 'PREPARING' || currentOrder.barStatus === 'PREPARING' || currentOrder.hookahStatus === 'PREPARING';
+  const isOrderReady =
+    isOrderDelivered ||
+    currentOrder.status === 'READY' ||
+    currentOrder.status === 'READY_FOR_PICKUP' ||
+    (hasAnyStation && kReady && bReady && hReady && anyStationReadyOrDone);
+  const isOrderPreparing =
+    isOrderReady ||
+    currentOrder.status === 'PREPARING' ||
+    currentOrder.status === 'IN_KITCHEN' ||
+    currentOrder.kitchenStatus === 'PREPARING' ||
+    currentOrder.barStatus === 'PREPARING' ||
+    currentOrder.hookahStatus === 'PREPARING';
   const isOrderReceived = true;
 
   const [elapsedTimeStr, setElapsedTimeStr] = useState<string>('Just now');
@@ -193,13 +222,24 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
           </div>
         </div>
 
-        <span className="text-[10px] uppercase font-mono font-medium px-2 py-0.5 rounded bg-white/[0.04] text-white/70 border border-white/[0.08]">
-          {currentOrder.status.replace(/_/g, ' ')}
+        <span className={`text-[10px] uppercase font-mono font-medium px-2 py-0.5 rounded border ${isOrderDelivered ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-white/[0.04] text-white/70 border-white/[0.08]'}`}>
+          {(isOrderDelivered && currentOrder.status !== 'COMPLETED' && currentOrder.status !== 'SERVED'
+            ? 'DELIVERED'
+            : currentOrder.status
+          ).replace(/_/g, ' ')}
         </span>
       </div>
 
-      {/* Main Countdown Timer Display */}
-      {currentOrder.status !== 'DELIVERED' && (
+      {/* Main Countdown Timer Display or Delivered Confirmation */}
+      {isOrderDelivered ? (
+        <div className="p-3.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <div>
+            <p className="text-xs font-semibold text-emerald-300">Order Delivered</p>
+            <p className="text-[11px] text-white/60">{etaMessage}</p>
+          </div>
+        </div>
+      ) : (
         <div className="p-4 bg-[#0b0d11] rounded-xl border border-white/[0.06] flex flex-col items-center justify-center text-center space-y-1">
           <span className="text-[11px] font-mono uppercase tracking-wider text-white/40 flex items-center gap-1.5">
             <Clock className="w-3.5 h-3.5 text-amber-400" />

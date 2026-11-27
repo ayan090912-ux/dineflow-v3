@@ -2293,14 +2293,34 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
       </Modal>
 
       {/* STICKY FLOATING ACTIVE SESSION ORDER STATUS BAR */}
-      {customerOrders.filter((o) => o.status !== 'CANCELLED').length > 0 && (
+      {(() => {
+        const activeOrders = customerOrders.filter((o) => o.status !== 'CANCELLED');
+        if (activeOrders.length === 0) return null;
+        const allDelivered = activeOrders.every(
+          (o) =>
+            o.status === 'DELIVERED' ||
+            o.status === 'COMPLETED' ||
+            o.status === 'SERVED' ||
+            o.deliveryStatus === 'DELIVERED'
+        );
+        return (
         <div
           className={`fixed inset-x-0 mx-auto w-[calc(100%-2rem)] max-w-md z-40 transition-all duration-300 safe-bottom ${
             totalCartCount > 0 ? 'bottom-20' : 'bottom-4'
           }`}
         >
           <div
-            onClick={() => setIsOrderStatusModalOpen(true)}
+            onClick={() => {
+              const restId = currentRestaurant?.id;
+              if (restId) {
+                api.getCustomerOrders(restId, currentTable?.id || selectedTableNum, currentTableSession?.id)
+                  .then((orders) => {
+                    if (Array.isArray(orders)) setCustomerOrders(orders);
+                  })
+                  .catch(() => {});
+              }
+              setIsOrderStatusModalOpen(true);
+            }}
             className="liquid-glass-strong border border-white/[0.14] p-3 rounded-2xl shadow-[0_12px_32px_rgba(0,0,0,0.6)] backdrop-blur-2xl flex items-center justify-between gap-3 cursor-pointer group hover:border-amber-400/40 transition-all"
           >
             <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -2309,12 +2329,14 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
               </div>
               <div className="space-y-0.5 min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-white truncate">Live Order In Progress</span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shrink-0 animate-pulse" />
+                  <span className="text-xs font-bold text-white truncate">
+                    {allDelivered ? 'Order Delivered ✓' : 'Live Order In Progress'}
+                  </span>
+                  <span className={`w-2 h-2 rounded-full bg-emerald-400 inline-block shrink-0 ${allDelivered ? '' : 'animate-pulse'}`} />
                 </div>
                 <p className="text-[11px] text-white/60 font-mono truncate">
-                  {customerOrders.filter((o) => o.status !== 'CANCELLED').length} {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 1 ? 'Order' : 'Orders'} · Total: ₹
-                  {customerOrders.filter((o) => o.status !== 'CANCELLED').reduce((sum, o) => sum + o.totalAmount, 0).toFixed(2)}
+                  {activeOrders.length} {activeOrders.length === 1 ? 'Order' : 'Orders'} · Total: ₹
+                  {activeOrders.reduce((sum, o) => sum + o.totalAmount, 0).toFixed(2)}
                 </p>
               </div>
             </div>
@@ -2327,7 +2349,8 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* RUNNING TABLE BILL MODAL */}
       <CustomerBillModal
