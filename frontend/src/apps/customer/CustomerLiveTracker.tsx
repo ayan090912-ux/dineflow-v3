@@ -120,22 +120,27 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
       }
 
       // If no ETA is set by station, show accurate status without inventing a completion time!
+      const isDelivery = currentOrder.orderType === 'DELIVERY' || currentOrder.tableNumber === 'DELIVERY';
       if (!currentOrder.etaTargetTimestamp) {
         setRemainingSeconds(0);
-        if (currentOrder.status === 'PENDING_DELIVERY') {
-          setEtaMessage('Order received by Delivery Terminal — dispatching to kitchen shortly.');
-        } else if (currentOrder.status === 'OUT_FOR_DELIVERY') {
-          setEtaMessage('Your order is out for delivery! Rider is on the way.');
-        } else if (isOrderDelivered) {
-          if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
+        if (isOrderDelivered) {
+          if (isDelivery) {
+            setEtaMessage('Delivered to your doorstep • Enjoy your meal!');
+          } else if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
             setEtaMessage('Your hookah has been delivered. Enjoy!');
           } else if (hasBarItems && !hasKitchenItems && !hasHookahItems) {
             setEtaMessage('Your beverages have been delivered. Enjoy!');
           } else {
             setEtaMessage('Served at your table • Enjoy your meal!');
           }
+        } else if (currentOrder.status === 'OUT_FOR_DELIVERY') {
+          setEtaMessage('Your order is out for delivery! Rider is on the way.');
+        } else if (currentOrder.status === 'PENDING_DELIVERY') {
+          setEtaMessage('Order received by Delivery Terminal — dispatching to kitchen shortly.');
         } else if (isOrderReady) {
-          if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
+          if (isDelivery) {
+            setEtaMessage('Order ready at kitchen • Rider collecting shortly!');
+          } else if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
             setEtaMessage('Your hookah is ready. Your waiter will bring it to your table shortly.');
           } else if (hasBarItems && !hasKitchenItems && !hasHookahItems) {
             setEtaMessage('Your beverages are ready. Your waiter will bring them to your table shortly.');
@@ -167,15 +172,21 @@ export const CustomerLiveTracker: React.FC<CustomerLiveTrackerProps> = ({ order,
       setRemainingSeconds(diffSec);
 
       if (isOrderDelivered) {
-        if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
+        if (isDelivery) {
+          setEtaMessage('Delivered to your doorstep • Enjoy your meal!');
+        } else if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
           setEtaMessage('Your hookah has been delivered. Enjoy!');
         } else if (hasBarItems && !hasKitchenItems && !hasHookahItems) {
           setEtaMessage('Your beverages have been delivered. Enjoy!');
         } else {
           setEtaMessage('Served at your table • Enjoy your meal!');
         }
+      } else if (currentOrder.status === 'OUT_FOR_DELIVERY') {
+        setEtaMessage('Your order is out for delivery! Rider is on the way.');
       } else if (isOrderReady) {
-        if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
+        if (isDelivery) {
+          setEtaMessage('Order ready at kitchen • Rider collecting shortly!');
+        } else if (hasHookahItems && !hasKitchenItems && !hasBarItems) {
           setEtaMessage('Your hookah is ready. Your waiter will bring it to your table shortly.');
         } else if (hasBarItems && !hasKitchenItems && !hasHookahItems) {
           setEtaMessage('Your beverages are ready. Your waiter will bring them to your table shortly.');

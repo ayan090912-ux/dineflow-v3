@@ -312,11 +312,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
           if (cfg) setDeliverySettings(cfg);
         }).catch(() => {});
         try {
-          const savedIds: string[] = JSON.parse(localStorage.getItem(`dinely_delivery_orders_${targetRestId}`) || '[]');
+          const storageKey = `dinely_delivery_orders_${targetRestId}`;
+          const savedIds: string[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
           if (savedIds.length > 0) {
             const fetched = await Promise.all(savedIds.slice(0, 10).map((id) => api.getOrderById(id).catch(() => null)));
-            const valid = fetched.filter((o): o is Order => Boolean(o && o.id));
-            setCustomerOrders(valid);
+            const isFinished = (o: Order) =>
+              o.status === 'DELIVERED' ||
+              o.status === 'COMPLETED' ||
+              o.status === 'CANCELLED' ||
+              o.deliveryStatus === 'DELIVERED';
+            const activeOnly = fetched.filter((o): o is Order => Boolean(o && o.id && !isFinished(o)));
+            localStorage.setItem(storageKey, JSON.stringify(activeOnly.map((o) => o.id)));
+            setCustomerOrders(activeOnly);
           }
         } catch {}
       } else {
@@ -377,6 +384,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         Promise.all(savedIds.slice(0, 10).map((id) => api.getOrderById(id).catch(() => null)))
           .then((fetched) => {
             const valid = fetched.filter((o): o is Order => Boolean(o && o.id));
+            const stillActiveIds = valid
+              .filter(
+                (o) =>
+                  o.status !== 'DELIVERED' &&
+                  o.status !== 'COMPLETED' &&
+                  o.status !== 'CANCELLED' &&
+                  o.deliveryStatus !== 'DELIVERED'
+              )
+              .map((o) => o.id);
+            try {
+              localStorage.setItem(`dinely_delivery_orders_${restId}`, JSON.stringify(stillActiveIds));
+            } catch {}
             setCustomerOrders((prev) => (isOrdersEqual(prev, valid) ? prev : valid));
           })
           .catch(() => {})
@@ -562,12 +581,18 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             prev.map((o) => (o.id === oId ? { ...o, status: 'COMPLETED', kitchenStatus: 'COMPLETED', barStatus: 'COMPLETED', hookahStatus: 'COMPLETED' } : o))
           );
         }
-      } else if (event.type === 'order_status_updated' || event.type === 'OrderStatusUpdated') {
+      } else if (
+        event.type === 'order_status_updated' ||
+        event.type === 'OrderStatusUpdated' ||
+        event.type === 'order_updated' ||
+        event.type === 'OrderUpdated'
+      ) {
         const newStatus = p.status || (event as any).status;
         const newKitchenStatus = p.kitchenStatus || p.kitchen_status || (event as any).kitchenStatus;
         const newBarStatus = p.barStatus || p.bar_status || (event as any).barStatus;
         const newHookahStatus = p.hookahStatus || p.hookah_status || (event as any).hookahStatus;
         const newDeliveryStatus = p.deliveryStatus || p.delivery_status || (event as any).deliveryStatus;
+        const newPaymentStatus = p.paymentStatus || p.payment_status || (event as any).paymentStatus;
         const mins = p.estimatedPrepTimeMinutes ?? p.estimated_prep_time_minutes;
         const target = p.etaTargetTimestamp ?? p.eta_target_timestamp;
         if (oId) {
@@ -581,6 +606,7 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
                     barStatus: newBarStatus || o.barStatus,
                     hookahStatus: newHookahStatus || o.hookahStatus,
                     deliveryStatus: newDeliveryStatus || o.deliveryStatus,
+                    paymentStatus: newPaymentStatus || o.paymentStatus,
                     estimatedPrepTimeMinutes: mins !== undefined ? mins : o.estimatedPrepTimeMinutes,
                     etaTargetTimestamp: target !== undefined ? target : o.etaTargetTimestamp,
                   }
@@ -2648,6 +2674,41 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
         title="Live Order Status & Progress"
       >
         <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+          {isDeliveryMode &&
+            customerOrders.some(
+              (o) =>
+                o.status === 'DELIVERED' ||
+                o.status === 'COMPLETED' ||
+                o.status === 'SERVED' ||
+                o.deliveryStatus === 'DELIVERED'
+            ) && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const remaining = customerOrders.filter(
+                      (o) =>
+                        o.status !== 'DELIVERED' &&
+                        o.status !== 'COMPLETED' &&
+                        o.status !== 'CANCELLED' &&
+                        o.status !== 'SERVED' &&
+                        o.deliveryStatus !== 'DELIVERED'
+                    );
+                    setCustomerOrders(remaining);
+                    const rId = currentRestaurant?.id;
+                    if (rId) {
+                      try {
+                        localStorage.setItem(`dinely_delivery_orders_${rId}`, JSON.stringify(remaining.map((o) => o.id)));
+                      } catch {}
+                    }
+                    if (remaining.length === 0) setIsOrderStatusModalOpen(false);
+                  }}
+                  className="px-3 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-[11px] font-mono text-slate-200 cursor-pointer"
+                >
+                  Clear Delivered Orders
+                </button>
+              </div>
+            )}
           {customerOrders.filter((o) => o.status !== 'CANCELLED').length === 0 ? (
             <div className="p-8 text-center liquid-glass rounded-xl border border-white/[0.08] text-white/40 space-y-2">
               <Clock className="w-8 h-8 text-white/20 mx-auto" />
@@ -2691,11 +2752,25 @@ export const CustomerApp: React.FC<{ tableNumber?: string }> = ({
             onClick={() => {
               const restId = currentRestaurant?.id;
               if (restId) {
-                api.getCustomerOrders(restId, currentTable?.id || selectedTableNum, currentTableSession?.id)
-                  .then((orders) => {
-                    if (Array.isArray(orders)) setCustomerOrders(orders);
-                  })
-                  .catch(() => {});
+                if (isDeliveryMode) {
+                  try {
+                    const savedIds: string[] = JSON.parse(localStorage.getItem(`dinely_delivery_orders_${restId}`) || '[]');
+                    if (savedIds.length > 0) {
+                      Promise.all(savedIds.slice(0, 10).map((id) => api.getOrderById(id).catch(() => null)))
+                        .then((fetched) => {
+                          const valid = fetched.filter((o): o is Order => Boolean(o && o.id));
+                          if (valid.length > 0) setCustomerOrders(valid);
+                        })
+                        .catch(() => {});
+                    }
+                  } catch {}
+                } else {
+                  api.getCustomerOrders(restId, currentTable?.id || selectedTableNum, currentTableSession?.id)
+                    .then((orders) => {
+                      if (Array.isArray(orders)) setCustomerOrders(orders);
+                    })
+                    .catch(() => {});
+                }
               }
               setIsOrderStatusModalOpen(true);
             }}
